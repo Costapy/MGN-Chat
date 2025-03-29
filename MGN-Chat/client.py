@@ -2,7 +2,7 @@ import zmq
 import time
 from threading import Thread
 import json
-
+import os
 
 class ChatClient:
     def __init__(self, user_id):
@@ -37,10 +37,28 @@ class ChatClient:
 
     def request_users_online(self):
         response = self._send_to_server({
-            "type": "requestUSersOnline",
+            "type": "request_users_online",
             "user": self.user_id
         })
+        time.sleep(1)
         return response.get('users', [])
+
+    def show_info_terminal(self):
+        while self.running:
+            users = self.request_users_online()
+            os.system('cls' if os.name == 'nt' else 'clear')
+            print('<<MGN-Chat>> \n')
+            print('Users Online:', users)
+            print('-------------\n')
+            options = input("1-Enviar Mensagem \n2-Atualizar\n3-Sair\n----------\n \n")
+            if options == '1':
+                recipient = input("Digite o nome do usuário que deseja conversar: ")
+                client.start_chat(recipient)
+                return 0
+            if options == '3':
+                exit(1)
+
+            time.sleep(1)
 
     def fetch_messages(self):
         response = self._send_to_server({
@@ -88,13 +106,11 @@ class ChatClient:
 
 
 if __name__ == "__main__":
-    print("Bem vindo ao MGN-Chat")
+
+
+    print("Bem vindo ao MGN-Chat.\n")
     user_id = input("Digite seu nome de usuário: ")
     client = ChatClient(user_id)
-    print("Usuarios Online:")
-    print("--------------")
+    Thread(client.show_info_terminal(), daemon=True).start()
 
-    options = input("1-Enviar Mensagem \n2-Sair\n----------\n \n")
-    if options == '1':
-        recipient = input("Digite o nome do usuário com quem deseja conversar: ")
-        client.start_chat(recipient)
+

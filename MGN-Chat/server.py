@@ -41,7 +41,7 @@ class ChatServer:
                     self.receiver.send_json({'status': 'delivered'})
                     self.notifier.send_string(recipient)
 
-                elif msg['type'] == 'requestUsersOnline':
+                elif msg['type'] == 'request_users_online':
                     self.receiver.send_json({'users': list(self.active_users)})
 
 
