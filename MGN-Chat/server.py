@@ -23,12 +23,12 @@ class ChatServer:
                 msg = self.receiver.recv_json()
                 print(f"Servidor recebeu: {msg}")
 
-                if(msg['type'] == 'connect'):
+                if (msg['type'] == 'connect'):
                     user = msg['user']
                     self.active_users.add(user)
                     self.receiver.send_json({'status': 'connected'})
-                
-                elif(msg['type'] == 'message'):
+
+                elif msg['type'] == 'message':
                     sender = msg['from']
                     recipient = msg['to']
                     message = msg['message']
@@ -38,9 +38,12 @@ class ChatServer:
                         'message': message,
                         'timestamp': time.time()
                     })
-
                     self.receiver.send_json({'status': 'delivered'})
                     self.notifier.send_string(recipient)
+
+                elif msg['type'] == 'request_users_online':
+                    self.receiver.send_json({'users': list(self.active_users)})
+
 
                 elif msg['type'] == 'fetch':
                     user = msg['user']
@@ -55,11 +58,11 @@ class ChatServer:
                     self.receiver.send_json({'status': 'disconnected'})
             except Exception as e:
                 print(f"Erro no servidor: {e}")
-    
+
     def run(self):
         print("Servidor de chat iniciado...")
         Thread(target=self.handle_messages, daemon=True).start()
-        
+
         try:
             while True:
                 time.sleep(1)
@@ -69,8 +72,7 @@ class ChatServer:
             self.notifier.close()
             self.context.term()
 
+
 if __name__ == "__main__":
     server = ChatServer()
     server.run()
-
-                    
