@@ -1,0 +1,14 @@
+docker build -t kivy-chat . 
+
+docker run -it --rm \                                                                              ─╯
+  -p 5555:5555 \
+  -p 5556:5556 \
+  -v ~/Documentos/GitHub/MGN-Chat/MGN-Chat:/app \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  -e DISPLAY=$DISPLAY \
+  kivy-chat
+
+
+docker exec -it 9bd /bin/bash    *Para rodar o terminal do dcokerno seu terminal
+
+xhost +SI:localuser:root         *Para permitir que o usuário root acesse o servidor gráfico x11 da sessão (se necessário)
