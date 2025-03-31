@@ -12,3 +12,18 @@ docker run -it --rm \                                                           
 docker exec -it 9bd /bin/bash    *Para rodar o terminal do dcokerno seu terminal
 
 xhost +SI:localuser:root         *Para permitir que o usuário root acesse o servidor gráfico x11 da sessão (se necessário)
+
+
+Configurar o server para aceitar as portas:
+Windows:
+  netsh advfirewall firewall add rule name="ZMQ Chat Server" dir=in action=allow protocol=TCP localport=5555
+  netsh advfirewall firewall add rule name="ZMQ Chat Notifier" dir=in action=allow protocol=TCP localport=5556
+
+Linux:
+  sudo ufw allow 5555/tcp
+  sudo ufw allow 5556/tcp
+
+Teste se o servidor está ouvindo conexões:
+  sudo netstat -tulnp | grep 5555
+
+

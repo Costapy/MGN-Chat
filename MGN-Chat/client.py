@@ -9,20 +9,19 @@ from threading import Thread
 import time
 import zmq
 
-
+SERVER_IP = "192.168.1.10"
 class ChatClient:
     def __init__(self, user_id):
         self.user_id = user_id
         self.context = zmq.Context()
         self.running = True
-
         # Socket para enviar mensagens ao servidor
         self.sender = self.context.socket(zmq.REQ)
-        self.sender.connect("tcp://localhost:5555")
+        self.sender.connect(f"tcp://{SERVER_IP}:5555")
 
         # Socket para receber notificações
         self.notifier = self.context.socket(zmq.SUB)
-        self.notifier.connect("tcp://localhost:5556")
+        self.notifier.connect(f"tcp://{SERVER_IP}:5556")
         self.notifier.setsockopt_string(zmq.SUBSCRIBE, self.user_id)
 
         # Conecta ao servidor
