@@ -8,8 +8,10 @@ from kivy.clock import Clock
 from threading import Thread
 import time
 import zmq
+import sqlalchemy
 
-SERVER_IP = "192.168.1.10"
+
+SERVER_IP = "192.168.2.117"
 class ChatClient:
     def __init__(self, user_id):
         self.user_id = user_id
