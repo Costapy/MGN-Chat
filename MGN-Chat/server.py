@@ -59,7 +59,13 @@ class ChatServer:
 
                 # Tratamento de outros tipos de mensagem...
                 elif msg['type'] == 'message':
-                    ...
+                    recipient = msg.get('to')
+                    if recipient:
+                        # Armazena a mensagem para o destinatário
+                        self.messages[recipient].append(msg)
+                        # Envia uma resposta para confirmar que a mensagem foi recebida
+                        self.receiver.send_json({'status': 'message sent'})
+
                 elif msg['type'] == 'request_users_online':
                     self.receiver.send_json({'users': list(self.active_users)})
                 elif msg['type'] == 'fetch':
