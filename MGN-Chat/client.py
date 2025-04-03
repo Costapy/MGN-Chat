@@ -161,8 +161,6 @@ class ChatScreen(Screen):
         Clock.schedule_interval(self.fetch_messages, 1)
         Clock.schedule_interval(self.update_users_online, 5)
 
-        # Inicia thread em background para buscar mensagens continuamente
-        Thread(target=self.background_fetch, daemon=True).start()
 
     def _update_chat_height(self, instance, value):
         instance.height = instance.texture_size[1]
@@ -196,11 +194,7 @@ class ChatScreen(Screen):
                 btn.bind(on_press=self.select_user)
                 self.users_box.add_widget(btn)
 
-    def background_fetch(self):
-        while True:
-            time.sleep(1)
-            Clock.schedule_once(self.fetch_messages)
-
+    
     def select_user(self, instance):
         self.recipient = instance.text
         self.chat_label.text += f"\n[Agora conversando com {self.recipient}]"
