@@ -4,51 +4,39 @@ import zmq
 from threading import Thread
 from kivy.app import App
 from kivy.clock import Clock
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.button import Button
-from kivy.uix.label import Label
-from kivy.uix.screenmanager import ScreenManager, Screen
-from kivy.uix.textinput import TextInput
+from kivy.lang import Builder
 from kivy.storage.jsonstore import JsonStore
+from kivy.uix.screenmanager import ScreenManager, Screen
+from kivy.uix.button import Button
 
 store = JsonStore('user_store.json')
-
-# Endereço do servidor
 SERVER_IP = "18.221.96.181"
 
 def get_local_ip():
-    "Obtém o IP local do cliente."
     return socket.gethostbyname(socket.gethostname())
 
-# ---------------------------------------------------------
-# Cliente de Chat com ZMQ
-# ---------------------------------------------------------
+# --------------------------------------------------
+# Cliente de Chat com ZeroMQ
+# --------------------------------------------------
 class ChatClient:
     def __init__(self, user_id):
         self.user_id = user_id
         self.context = zmq.Context()
-
-        # Socket para enviar requisições ao servidor
         self.sender = self.context.socket(zmq.REQ)
         self.sender.connect(f"tcp://{SERVER_IP}:5555")
-
-        # Socket para receber notificações
         self.notifier = self.context.socket(zmq.SUB)
         self.notifier.connect(f"tcp://{SERVER_IP}:5556")
         self.notifier.setsockopt_string(zmq.SUBSCRIBE, self.user_id)
-
-        # Obtém o IP e envia o pedido de conexão com o nome
         self.ip = get_local_ip()
         connect_msg = {'type': 'connect', 'ip': self.ip, 'user': self.user_id}
         response = self._send_to_server(connect_msg)
-        # Se o servidor reconhecer o IP, pode atualizar o nome
         if response.get('status') == 'connected' and 'user' in response:
             self.user_id = response['user']
 
     def _send_to_server(self, message):
         try:
             self.sender.send_json(message)
-            if self.sender.poll(2000):  # espera até 2 segundos por uma resposta
+            if self.sender.poll(2000):
                 return self.sender.recv_json()
             else:
                 print("Timeout ao aguardar resposta do servidor")
@@ -57,13 +45,17 @@ class ChatClient:
             print(f"Erro ao enviar mensagem: {e}")
             return {}
 
-    def send_message(self, recipient, message):
+    def send_message(self, recipient, message, group=False):
+        msg_type = 'group_message' if group else 'message'
         msg = {
-            'type': 'message',
+            'type': msg_type,
             'from': self.user_id,
-            'to': recipient,
             'message': message
         }
+        if group:
+            msg['group'] = recipient
+        else:
+            msg['to'] = recipient
         return self._send_to_server(msg)
 
     def fetch_messages(self):
@@ -74,154 +66,249 @@ class ChatClient:
         response = self._send_to_server({"type": "request_users_online"})
         return response.get('users', [])
 
-# ---------------------------------------------------------
-# Tela de Login
-# ---------------------------------------------------------
+    def create_group(self, group_id, members):
+        msg = {
+            'type': 'create_group',
+            'group_id': group_id,
+            'members': members
+        }
+        return self._send_to_server(msg)
+
+# --------------------------------------------------
+# Interface com Kivy (KV string)
+# --------------------------------------------------
+kv = """
+ScreenManager:
+    LoginScreen:
+    MainMenuScreen:
+    UserListScreen:
+    CreateGroupScreen:
+    ChatScreen:
+
+<LoginScreen>:
+    name: "login"
+    BoxLayout:
+        orientation: 'vertical'
+        padding: 20
+        spacing: 20
+        Label:
+            text: "Entre com seu nome:"
+            font_size: 20
+        TextInput:
+            id: name_input
+            multiline: False
+            font_size: 18
+        Button:
+            text: "Entrar"
+            size_hint_y: 0.3
+            on_press: root.do_login()
+
+<MainMenuScreen>:
+    name: "menu"
+    BoxLayout:
+        orientation: 'vertical'
+        padding: 20
+        spacing: 20
+        Label:
+            text: "Bem-vindo! Escolha uma op\u00e7\u00e3o:"
+            font_size: 20
+        Button:
+            text: "Chat Individual"
+            size_hint_y: 0.3
+            on_press: root.go_to_individual()
+        Button:
+            text: "Criar Grupo"
+            size_hint_y: 0.3
+            on_press: root.go_to_create_group()
+
+<UserListScreen>:
+    name: "user_list"
+    BoxLayout:
+        orientation: 'vertical'
+        padding: 20
+        spacing: 20
+        Label:
+            text: "Selecione um usu\u00e1rio para conversar:"
+            font_size: 20
+        BoxLayout:
+            id: users_box
+            orientation: 'vertical'
+        Button:
+            text: "Voltar ao Menu"
+            size_hint_y: 0.2
+            on_press: app.root.current = "menu"
+
+<CreateGroupScreen>:
+    name: "create_group"
+    BoxLayout:
+        orientation: 'vertical'
+        padding: 20
+        spacing: 20
+        Label:
+            text: "Selecione os usu\u00e1rios online para criar o grupo:"
+            font_size: 20
+        BoxLayout:
+            id: group_users_box
+            orientation: 'vertical'
+        Button:
+            text: "Criar Grupo"
+            size_hint_y: 0.2
+            on_press: root.create_group_action()
+        Button:
+            text: "Voltar ao Menu"
+            size_hint_y: 0.2
+            on_press: app.root.current = "menu"
+
+<ChatScreen>:
+    name: "chat"
+    BoxLayout:
+        orientation: 'vertical'
+        padding: 10
+        spacing: 10
+        ScrollView:
+            do_scroll_x: False
+            Label:
+                id: chat_label
+                text: ""
+                font_size: 16
+                size_hint_y: None
+                height: self.texture_size[1]
+                markup: True
+        BoxLayout:
+            size_hint_y: 0.1
+            TextInput:
+                id: message_input
+                multiline: False
+                font_size: 16
+            Button:
+                text: "Enviar"
+                size_hint_x: 0.3
+                on_press: root.send_message()
+        Label:
+            id: current_chat_label
+            text: "Conversa Individual"
+            font_size: 16
+        Button:
+            text: "Voltar ao Menu"
+            size_hint_y: 0.2
+            on_press: app.root.current = "menu"
+"""
+
+# --------------------------------------------------
+# Telas do App
+# --------------------------------------------------
 class LoginScreen(Screen):
-    def __init__(self, **kwargs):
-        super(LoginScreen, self).__init__(**kwargs)
-        layout = BoxLayout(orientation='vertical', padding=20, spacing=20)
-        self.info_label = Label(text="Entre com seu nome:", font_size=20)
-        self.name_input = TextInput(multiline=False, font_size=18)
-        self.login_button = Button(text="Entrar", size_hint=(1, 0.3), font_size=20)
-        self.login_button.bind(on_press=self.login)
-        layout.add_widget(self.info_label)
-        layout.add_widget(self.name_input)
-        layout.add_widget(self.login_button)
-        self.add_widget(layout)
-
-    def kill(self):
-        # Obtém a tela 'profile' a partir do ScreenManager
-        profile_screen = self.root.get_screen('profile')
-        # Acessa os IDs que estão definidos na tela 'profile'
-        enname = profile_screen.ids.user.text
-        epass = profile_screen.ids.password.text
-        eid = profile_screen.ids.ID.text
-        # Valores esperados para autenticação
-        name = "pranav"
-        password = "1234"
-        id = '1'
-    
-        if name == enname and password == epass and id == eid:
-            profile_screen.ids.error.text = 'Youre logged in'
-            profile_screen.ids.user.text = ''
-            profile_screen.ids.password.text = ''
-            profile_screen.ids.ID.text = ''
-        else:
-            profile_screen.ids.error.text = 'Please enter Valid credentials'
-            profile_screen.ids.user.text = ''
-            profile_screen.ids.password.text = ''
-            profile_screen.ids.ID.text = ''
-    
-
-    def login(self, instance):
-        user_name = self.name_input.text.strip()
+    def do_login(self):
+        user_name = self.ids.name_input.text.strip()
         if user_name:
-            # Cria a instância do ChatClient e guarda no ScreenManager
             self.manager.chat_client = ChatClient(user_id=user_name)
-            # Salva o nome do usuário localmente
             store.put('user', name=user_name)
-            # Muda para a tela de chat
-            self.manager.current = 'chat'
+            self.manager.current = "menu"
         else:
-            self.info_label.text = "Por favor, digite um nome válido."
+            self.ids.name_input.text = ""
+            self.ids.name_input.hint_text = "Digite um nome v\u00e1lido"
 
+class MainMenuScreen(Screen):
+    def go_to_individual(self):
+        self.manager.current = "user_list"
+    def go_to_create_group(self):
+        self.manager.current = "create_group"
 
-# ---------------------------------------------------------
-# Tela de Chat
-# ---------------------------------------------------------
+class UserListScreen(Screen):
+    def on_enter(self):
+        box = self.ids.users_box
+        box.clear_widgets()
+        users = self.manager.chat_client.request_users_online() if self.manager.chat_client else []
+        current_user = self.manager.chat_client.user_id if self.manager.chat_client else ""
+        for user in users:
+            if user != current_user:
+                btn = Button(text=user, size_hint_y=None, height=40)
+                btn.bind(on_press=self.select_user)
+                box.add_widget(btn)
+    def select_user(self, instance):
+        chat_screen = self.manager.get_screen("chat")
+        chat_screen.recipient = instance.text
+        chat_screen.is_group = False
+        chat_screen.ids.current_chat_label.text = f"Conversa com {instance.text}"
+        self.manager.current = "chat"
+
+class CreateGroupScreen(Screen):
+    selected_users = []
+    def on_enter(self):
+        self.selected_users = []
+        box = self.ids.group_users_box
+        box.clear_widgets()
+        users = self.manager.chat_client.request_users_online() if self.manager.chat_client else []
+        current_user = self.manager.chat_client.user_id if self.manager.chat_client else ""
+        for user in users:
+            if user != current_user:
+                btn = Button(text=user, size_hint_y=None, height=40)
+                btn.bind(on_press=self.toggle_user)
+                box.add_widget(btn)
+    def toggle_user(self, instance):
+        user = instance.text
+        if user in self.selected_users:
+            self.selected_users.remove(user)
+            instance.background_color = (1, 1, 1, 1)
+        else:
+            self.selected_users.append(user)
+            instance.background_color = (0, 1, 0, 1)
+    def create_group_action(self):
+        if not self.selected_users:
+            print("Nenhum usu\u00e1rio selecionado para o grupo")
+            return
+        # Gera um ID de grupo simples; por exemplo, juntando os nomes selecionados
+        group_id = "grupo_" + "_".join(sorted(self.selected_users))
+        current_user = self.manager.chat_client.user_id
+        members = [current_user] + self.selected_users
+        response = self.manager.chat_client.create_group(group_id, members)
+        print("Grupo criado:", response)
+        chat_screen = self.manager.get_screen("chat")
+        chat_screen.recipient = group_id
+        chat_screen.is_group = True
+        chat_screen.ids.current_chat_label.text = f"Grupo: {group_id}"
+        self.manager.current = "chat"
+
 class ChatScreen(Screen):
+    recipient = None
+    is_group = False  # False para chat individual, True para grupo
     def __init__(self, **kwargs):
         super(ChatScreen, self).__init__(**kwargs)
-        self.recipient = None
-        layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
-        # Configuração do layout (chat_label, msg_box, users_label, etc.)
-        self.chat_label = Label(text="", size_hint_y=None, font_size=16)
-        self.chat_label.bind(texture_size=self._update_chat_height)
-        chat_box = BoxLayout(orientation='vertical', size_hint=(1, 0.6))
-        chat_box.add_widget(self.chat_label)
-        layout.add_widget(chat_box)
-
-        msg_box = BoxLayout(size_hint=(1, 0.1))
-        self.message_input = TextInput(multiline=False, font_size=16)
-        send_button = Button(text="Enviar", size_hint=(0.3, 1), font_size=16)
-        send_button.bind(on_press=self.send_message)
-        msg_box.add_widget(self.message_input)
-        msg_box.add_widget(send_button)
-        layout.add_widget(msg_box)
-
-        self.users_label = Label(text="Usuários Online: (0)", size_hint=(1, 0.1), font_size=16)
-        layout.add_widget(self.users_label)
-        self.users_box = BoxLayout(orientation='vertical', size_hint=(1, 0.2))
-        layout.add_widget(self.users_box)
-
-        self.add_widget(layout)
-
-        # Atualiza mensagens e usuários periodicamente
         Clock.schedule_interval(self.fetch_messages, 1)
-        Clock.schedule_interval(self.update_users_online, 5)
-
-
-    def _update_chat_height(self, instance, value):
-        instance.height = instance.texture_size[1]
-
-    def send_message(self, instance):
+    def send_message(self):
         if not self.recipient:
-            self.chat_label.text += "\n[Erro] Selecione um usuário para conversar!"
+            self.ids.chat_label.text += "\n[Erro] Nenhum destinat\u00e1rio selecionado!"
             return
-        message = self.message_input.text.strip()
+        message = self.ids.message_input.text.strip()
         if message:
-            self.manager.chat_client.send_message(self.recipient, message)
-            self.chat_label.text += f"\nVocê para {self.recipient}: {message}"
-            self.message_input.text = ''
-
+            if self.is_group:
+                self.manager.chat_client.send_message(self.recipient, message, group=True)
+                self.ids.chat_label.text += f"\nVocê [{self.recipient}]: {message}"
+            else:
+                self.manager.chat_client.send_message(self.recipient, message)
+                self.ids.chat_label.text += f"\nVocê para {self.recipient}: {message}"
+            self.ids.message_input.text = ""
     def fetch_messages(self, dt):
-        if not hasattr(self.manager, 'chat_client') or self.manager.chat_client is None:
+        if not self.manager.chat_client:
             return
         messages = self.manager.chat_client.fetch_messages()
         for msg in messages:
-            self.chat_label.text += f"\n{msg['from']}: {msg['message']}"
+            if msg.get('group'):
+                self.ids.chat_label.text += f"\n{msg['from']} [{msg['group']}]: {msg['message']}"
+            else:
+                self.ids.chat_label.text += f"\n{msg['from']}: {msg['message']}"
 
-    def update_users_online(self, dt):
-        if not hasattr(self.manager, 'chat_client') or self.manager.chat_client is None:
-            return
-        users = self.manager.chat_client.request_users_online()
-        self.users_label.text = f"Usuários Online: ({len(users)})"
-        self.users_box.clear_widgets()
-        for user in users:
-            if user != self.manager.chat_client.user_id:
-                btn = Button(text=user, size_hint_y=None, height=40, font_size=16)
-                btn.bind(on_press=self.select_user)
-                self.users_box.add_widget(btn)
-
-    
-    def select_user(self, instance):
-        self.recipient = instance.text
-        self.chat_label.text += f"\n[Agora conversando com {self.recipient}]"
-
-
-# ---------------------------------------------------------
-# Gerenciador de Telas e App
-# ---------------------------------------------------------
 class ChatApp(App):
     def build(self):
-        sm = ScreenManager()
+        sm = Builder.load_string(kv)
         sm.chat_client = None
-        login_screen = LoginScreen(name='login')
-        chat_screen = ChatScreen(name='chat')
-        sm.add_widget(login_screen)
-        sm.add_widget(chat_screen)
-        
-        # Verifica se o usuário já está salvo localmente
-        store = JsonStore('user_store.json')
         if store.exists('user'):
             user_name = store.get('user')['name']
             sm.chat_client = ChatClient(user_id=user_name)
-            sm.current = 'chat'
+            sm.current = "menu"
         else:
-            sm.current = 'login'
+            sm.current = "login"
         return sm
-
 
 if __name__ == '__main__':
     ChatApp().run()
